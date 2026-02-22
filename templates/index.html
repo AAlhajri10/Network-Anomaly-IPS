@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Network Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a2e; color: white; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; }
+        .chart-container { background: #16213e; padding: 20px; border-radius: 10px; margin-bottom: 20px; height: 300px; }
+        h1 { text-align: center; background: #e94560; padding: 15px; border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #0f3460; }
+        .status-anomaly { color: #ff4d4d; font-weight: bold; }
+        .status-normal { color: #4dff88; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Smart Network Traffic Monitor</h1>
+        
+        <div class="chart-container">
+            <canvas id="trafficChart"></canvas>
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Time</th><th>Source IP</th><th>Status</th><th>Risk</th></tr>
+            </thead>
+            <tbody id="traffic-data"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('trafficChart').getContext('2d');
+        const trafficChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Normal Traffic', 'Anomalies'],
+                datasets: [{
+                    label: 'Packet Count',
+                    data: [0, 0],
+                    backgroundColor: ['#4dff88', '#ff4d4d']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        async function updateDashboard() {
+            const response = await fetch('/api/alerts');
+            const data = await response.json();
+            const tableBody = document.getElementById('traffic-data');
+            
+            let normalCount = 0;
+            let anomalyCount = 0;
+            tableBody.innerHTML = '';
+
+            data.reverse().forEach(alert => {
+                if(alert.status.includes('Anomaly')) { anomalyCount++; } else { normalCount++; }
+                
+                tableBody.innerHTML += `<tr>
+                    <td>${alert.time}</td>
+                    <td>${alert.src}</td>
+                    <td class="${alert.status.includes('Anomaly') ? 'status-anomaly' : 'status-normal'}">${alert.status}</td>
+                    <td>${alert.level}</td>
+                </tr>`;
+            });
+
+            trafficChart.data.datasets[0].data = [normalCount, anomalyCount];
+            trafficChart.update();
+        }
+
+        setInterval(updateDashboard, 2000);
+    </script>
+</body>
+</html>
