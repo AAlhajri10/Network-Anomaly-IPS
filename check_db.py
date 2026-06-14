@@ -1,43 +1,79 @@
+"""
+Smart Network Traffic Analysis and Anomaly Detection System (SNTAADS)
+----------------------------------------------------------------------
+check_db.py
+Quick diagnostic utility — verifies the database is populated and
+prints a summary of the most recent log entries.
+
+Author : Ammar Nasser Said Al-Hajri  (22F23369)
+College: Middle East College, Knowledge Oasis Muscat
+"""
+
 import sqlite3
 import os
+import logging
 
-DB_NAME = "network_logs.db"
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("SNTAADS.CheckDB")
 
-def verify_data():
-    if not os.path.exists(DB_NAME):
-        print(f"Error: {DB_NAME} not found in this folder!")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH  = os.path.join(BASE_DIR, "sntaads_logs.db")
+
+
+def verify_database(db_path: str = DB_PATH, recent_n: int = 10) -> None:
+    if not os.path.exists(db_path):
+        log.error("Database not found: %s", db_path)
         return
 
     try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
+        conn = sqlite3.connect(db_path)
 
-        # 1. Count Total Logs
-        cursor.execute("SELECT COUNT(*) FROM logs")
-        total = cursor.fetchone()[0]
+        total_packets = conn.execute(
+            "SELECT COUNT(*) FROM logs"
+        ).fetchone()[0]
 
-        # 2. Count Anomalies
-        cursor.execute("SELECT COUNT(*) FROM logs WHERE status LIKE '%Anomaly%'")
-        anomalies = cursor.fetchone()[0]
+        total_anomalies = conn.execute(
+            "SELECT COUNT(*) FROM logs WHERE risk = 'High'"
+        ).fetchone()[0]
 
-        # 3. Get Last 10 Entries
-        cursor.execute("SELECT * FROM logs ORDER BY rowid DESC LIMIT 10")
-        rows = cursor.fetchall()
+        normal_traffic = conn.execute(
+            "SELECT COUNT(*) FROM logs WHERE risk = 'Low'"
+        ).fetchone()[0]
 
-        print("-" * 50)
-        print(f"DATABASE VERIFICATION: {DB_NAME}")
-        print("-" * 50)
-        print(f"Total packets logged: {total}")
-        print(f"Anomalies detected:    {anomalies}")
-        print("-" * 50)
-        print("LAST 10 LOG ENTRIES:")
-        for row in rows:
-            print(f"Time: {row[0]} | IP: {row[1]} | Status: {row[3]}")
-        print("-" * 50)
+        recent_rows = conn.execute(
+            f"SELECT timestamp, src_ip, dst_ip, status, risk "
+            f"FROM logs ORDER BY id DESC LIMIT {recent_n}"
+        ).fetchall()
 
         conn.close()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+
+        sep = "-" * 65
+        print(f"\n{sep}")
+        print(f"  SNTAADS DATABASE VERIFICATION")
+        print(f"  Path : {db_path}")
+        print(sep)
+        print(f"  Total packets logged : {total_packets:,}")
+        print(f"  High-risk events     : {total_anomalies:,}")
+        print(f"  Normal traffic       : {normal_traffic:,}")
+        print(sep)
+        print(f"\n  LAST {recent_n} LOG ENTRIES:\n")
+
+        header = f"  {'Time':<21} {'Src IP':<16} {'Dst IP':<16} {'Status':<26} {'Risk'}"
+        print(header)
+        print(f"  {'-'*21} {'-'*15} {'-'*15} {'-'*25} {'-'*4}")
+        for row in recent_rows:
+            ts, src, dst, status, risk = row
+            print(f"  {ts:<21} {src:<16} {dst:<16} {status:<26} {risk}")
+
+        print(f"\n{sep}\n")
+
+    except sqlite3.Error as exc:
+        log.error("Database error: %s", exc)
+
 
 if __name__ == "__main__":
-    verify_data()
+    verify_database()
